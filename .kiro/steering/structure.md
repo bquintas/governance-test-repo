@@ -39,3 +39,5 @@ Every demo must include:
 - ❌ No hardcoded API endpoints
 - ❌ No separate LICENSE or CONTRIBUTING.md in demo directories
 - ❌ No committed `cdk.out*` directories
+
+<!-- Test 3: Governance guard test - this comment triggers the workflow -->
