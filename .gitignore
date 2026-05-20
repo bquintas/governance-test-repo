@@ -1,0 +1,20 @@
+# CDK
+cdk.out*
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# ASH output
+.ash/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keys
+*.pem

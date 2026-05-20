@@ -1,0 +1,88 @@
+name: CDK Validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/infrastructure/cdk/**'
+
+jobs:
+  cdk-synth:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11']
+        node-version: ['18']
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Detect modified CDK projects
+        id: detect
+        run: |
+          CDK_DIRS=$(git diff --name-only origin/main...HEAD | grep "infrastructure/cdk/" | sed 's|/infrastructure/cdk/.*|/infrastructure/cdk|' | sort -u)
+          echo "cdk_dirs=$CDK_DIRS" >> $GITHUB_OUTPUT
+          echo "Modified CDK directories: $CDK_DIRS"
+
+      - name: Validate CDK synth
+        run: |
+          CDK_DIRS="${{ steps.detect.outputs.cdk_dirs }}"
+          
+          if [ -z "$CDK_DIRS" ]; then
+            echo "No CDK directories modified — skipping."
+            exit 0
+          fi
+
+          EXIT_CODE=0
+          for CDK_DIR in $CDK_DIRS; do
+            echo ""
+            echo "=== Validating: $CDK_DIR ==="
+            
+            if [ -f "$CDK_DIR/requirements.txt" ]; then
+              # Python CDK project
+              python -m venv "$CDK_DIR/.venv"
+              source "$CDK_DIR/.venv/bin/activate"
+              pip install -r "$CDK_DIR/requirements.txt" -q
+              
+              export PYTHONPATH="$(pwd)"
+              pushd "$CDK_DIR" > /dev/null
+              if npx -y cdk synth --no-cli-pager > /dev/null 2>&1; then
+                echo "✅ CDK synth succeeded"
+              else
+                echo "❌ CDK synth failed"
+                npx -y cdk synth --no-cli-pager 2>&1 | tail -20
+                EXIT_CODE=1
+              fi
+              popd > /dev/null
+              deactivate
+              
+            elif [ -f "$CDK_DIR/package.json" ]; then
+              # TypeScript CDK project
+              pushd "$CDK_DIR" > /dev/null
+              npm install
+              if npx cdk synth --no-cli-pager > /dev/null 2>&1; then
+                echo "✅ CDK synth succeeded"
+              else
+                echo "❌ CDK synth failed"
+                npx cdk synth --no-cli-pager 2>&1 | tail -20
+                EXIT_CODE=1
+              fi
+              popd > /dev/null
+            else
+              echo "⚠️ No requirements.txt or package.json found in $CDK_DIR"
+            fi
+          done
+
+          exit $EXIT_CODE

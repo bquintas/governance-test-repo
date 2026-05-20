@@ -1,0 +1,4 @@
+# Governance files — require maintainer approval
+/.kiro/                     @bquintas
+/.github/workflows/         @bquintas
+/.github/CODEOWNERS         @bquintas

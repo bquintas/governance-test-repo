@@ -1,0 +1,55 @@
+name: Security Scan (ASH)
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install UV
+        run: curl -sSfL https://astral.sh/uv/install.sh | sh
+
+      - name: Run ASH security scan
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uvx git+https://github.com/awslabs/automated-security-helper.git@v3 \
+            --mode local \
+            --fail-on-findings false \
+            --output-dir .ash/output
+        continue-on-error: true
+
+      - name: Check for critical/high findings
+        run: |
+          if [ -f .ash/output/ash_aggregated_results.json ]; then
+            CRITICAL=$(python3 -c "
+          import json
+          with open('.ash/output/ash_aggregated_results.json') as f:
+              data = json.load(f)
+          findings = data.get('findings', [])
+          critical_high = [f for f in findings if f.get('severity', '').upper() in ('CRITICAL', 'HIGH')]
+          print(len(critical_high))
+          " 2>/dev/null || echo "0")
+            
+            echo "Critical/High findings: $CRITICAL"
+            if [ "$CRITICAL" -gt 0 ]; then
+              echo "❌ Security scan found $CRITICAL critical/high severity findings"
+              echo "Review the findings in the ASH output"
+              exit 1
+            else
+              echo "✅ No critical/high security findings"
+            fi
+          else
+            echo "⚠️ ASH output not found — scan may have failed"
+          fi
+
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ash-scan-results
+          path: .ash/output/
+          retention-days: 7
